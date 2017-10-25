@@ -7,8 +7,8 @@ _main() {
   ensure_make
   ensure_docker
   ensure_rocker
-  # ensure_jq
-  # ensure_awscli
+  ensure_jq
+  ensure_awscli
 }
 
 check_for_admin() {
@@ -23,6 +23,31 @@ die() {
   CHECKS_RETURNS=1
   exit 1;
 }
+ensure_awscli() {
+  local what='AWS CLI'
+  if ! which aws > /dev/null 2>&1 ; then
+    local msg="$what should be installed"
+    if [[ false == $CHANGE ]] ; then
+      echo "FAILURE: Check failed: $msg."
+      CHECKS_RETURNS=1
+    else # If CHANGE=true, make changes to install it.
+      echo "NOTE: $msg; installing now."
+      local uname_s=$(uname -s)
+      if [[ Darwin != $uname_s ]] ; then
+        echo "NOTE: Not installing $what on non-Darwin/non-MacOS (uname -s = '$uname_s')." 1>&2;
+        CHECKS_RETURNS=1
+      else
+        # check_for_admin || must_be_admin_error $what
+        ALREADY_SET_X=`case "$-" in *x*) echo "true" ;; esac`
+        set -x
+        brew install awscli \
+        || die "ERROR: $what install failed: '$?'."
+        [[ true == $ALREADY_SET_X ]] || set +x
+      fi ;
+    fi ;
+  fi ;
+}
+
 ensure_brew() {
   local what=Homebrew
   if ! which brew > /dev/null 2>&1 ; then
@@ -56,6 +81,31 @@ ensure_docker() {
       CHECKS_RETURNS=1
     else # If CHANGE=true, make changes to install it.
       die "ERROR: $msg; please install it from https://docs.docker.com/docker-for-mac/install/#install-and-run-docker-for-mac ."
+    fi ;
+  fi ;
+}
+ensure_jq() {
+  local what="jq"
+  if ! which jq > /dev/null 2>&1 ; then
+    local msg="$what should be installed"
+    if [[ false == $CHANGE ]] ; then
+      echo "FAILURE: Check failed: $msg."
+      CHECKS_RETURNS=1
+    else # If CHANGE=true, make changes to install it.
+      echo "NOTE: $msg; installing now."
+      local uname_s=$(uname -s)
+      if [[ Darwin != $uname_s ]] ; then
+        echo "NOTE: Not installing $what on non-Darwin/non-MacOS (uname -s = '$uname_s')." 1>&2;
+        # TODO: Consider someday adding support for non-Darwin/non-MacOS.
+        CHECKS_RETURNS=1
+      else
+        # check_for_admin || must_be_admin_error $what
+        ALREADY_SET_X=`case "$-" in *x*) echo "true" ;; esac`
+        set -x
+        brew install jq \
+        || die "ERROR: $what install failed: '$?'."
+        [[ true == $ALREADY_SET_X ]] || set +x
+      fi ;
     fi ;
   fi ;
 }
