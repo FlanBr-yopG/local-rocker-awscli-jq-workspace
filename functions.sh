@@ -21,8 +21,48 @@ _main() {
   ensure_awscli
   ensure_virtualbox
   ensure_vagrant
+  ensure_kubectl
 }
 
+_ensure_it() {
+  local what=$1
+  local whatcode=$2
+  local must_be_admin=$3
+  [[ $whatcode ]] || whatcode=$what
+  [[ $must_be_admin ]] || must_be_admin=false
+  if ! which $whatcode > /dev/null 2>&1 ; then
+    local msg="$what should be installed"
+    if [[ false == $CHANGE ]] ; then
+      fail_check "FAILURE: Check failed: $msg."
+    else # If CHANGE=true, make changes to install it.
+      echo "NOTE: $msg; installing now."
+      local uname_s=$(uname -s)
+      if [[ Darwin != $uname_s ]] ; then
+        fail_check "NOTE: Not installing $what on non-Darwin/non-MacOS (uname -s = '$uname_s')." 1>&2;
+      else
+        [[ false == $must_be_admin ]] || check_for_admin || must_be_admin_error $what
+        ALREADY_SET_X=`case "$-" in *x*) echo "true" ;; esac`
+        set -x
+        eval "install_$whatcode" \
+        || die "ERROR: $what install failed: '$?'."
+        [[ true == $ALREADY_SET_X ]] || set +x
+      fi ;
+    fi ;
+  fi ;
+}
+_ensure_manual() {
+  local what=$1
+  local whatcode=$2
+  if ! which $whatcode > /dev/null 2>&1 ; then
+    local msg="$what should be installed"
+    if [[ false == $CHANGE ]] ; then
+      fail_check "FAILURE: Check failed: $msg."
+    else # If CHANGE=true, make changes to install it.
+      local manual_url=$(eval "oops_manual_url_$whatcode")
+      die "ERROR: $msg; please install it from $manual_url ."
+    fi ;
+  fi ;
+}
 check_for_admin() {
   local result=0
   local admin_gid=$(get_admin_gid)
@@ -36,26 +76,7 @@ die() {
   exit 1;
 }
 ensure_awscli() {
-  local what='AWS CLI'
-  if ! which aws > /dev/null 2>&1 ; then
-    local msg="$what should be installed"
-    if [[ false == $CHANGE ]] ; then
-      fail_check "FAILURE: Check failed: $msg."
-    else # If CHANGE=true, make changes to install it.
-      echo "NOTE: $msg; installing now."
-      local uname_s=$(uname -s)
-      if [[ Darwin != $uname_s ]] ; then
-        fail_check "NOTE: Not installing $what on non-Darwin/non-MacOS (uname -s = '$uname_s')." 1>&2;
-      else
-        # check_for_admin || must_be_admin_error $what
-        ALREADY_SET_X=`case "$-" in *x*) echo "true" ;; esac`
-        set -x
-        brew install awscli \
-        || die "ERROR: $what install failed: '$?'."
-        [[ true == $ALREADY_SET_X ]] || set +x
-      fi ;
-    fi ;
-  fi ;
+  _ensure_it 'AWS CLI' aws
 }
 ensure_bin() {
   mk_bash_every_time;
@@ -110,143 +131,31 @@ ensure_bin() {
   done ;
 }
 ensure_brew() {
-  local what=Homebrew
-  if ! which brew > /dev/null 2>&1 ; then
-    local msg="$what should be installed"
-    if [[ false == $CHANGE ]] ; then
-      echo "FAILURE: Check failed: $msg."
-      CHECKS_RETURNS=1
-    else # If CHANGE=true, make changes to install it.
-      echo "NOTE: $msg; installing now."
-      local uname_s=$(uname -s)
-      if [[ Darwin != $uname_s ]] ; then
-        echo "NOTE: Not installing $what on non-Darwin/non-MacOS (uname -s = '$uname_s')." 1>&2;
-        CHECKS_RETURNS=1
-      else
-        check_for_admin || must_be_admin_error $what
-        ALREADY_SET_X=`case "$-" in *x*) echo "true" ;; esac`
-        set -x
-        /usr/bin/ruby -e "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/master/install)" \
-        || die "ERROR: $what install failed: '$?'."
-        [[ true == $ALREADY_SET_X ]] || set +x
-      fi ;
-    fi ;
-  fi ;
+  _ensure_it Homebrew brew true
 }
 ensure_docker() {
-  local what=Docker
-  if ! which docker > /dev/null 2>&1 ; then
-    local msg="$what should be installed"
-    if [[ false == $CHANGE ]] ; then
-      echo "FAILURE: Check failed: $msg."
-      CHECKS_RETURNS=1
-    else # If CHANGE=true, make changes to install it.
-      die "ERROR: $msg; please install it from https://docs.docker.com/docker-for-mac/install/#install-and-run-docker-for-mac ."
-    fi ;
-  fi ;
+  _ensure_manual Docker docker
 }
 ensure_jq() {
-  local what="jq"
-  if ! which jq > /dev/null 2>&1 ; then
-    local msg="$what should be installed"
-    if [[ false == $CHANGE ]] ; then
-      echo "FAILURE: Check failed: $msg."
-      CHECKS_RETURNS=1
-    else # If CHANGE=true, make changes to install it.
-      echo "NOTE: $msg; installing now."
-      local uname_s=$(uname -s)
-      if [[ Darwin != $uname_s ]] ; then
-        echo "NOTE: Not installing $what on non-Darwin/non-MacOS (uname -s = '$uname_s')." 1>&2;
-        # TODO: Consider someday adding support for non-Darwin/non-MacOS.
-        CHECKS_RETURNS=1
-      else
-        # check_for_admin || must_be_admin_error $what
-        ALREADY_SET_X=`case "$-" in *x*) echo "true" ;; esac`
-        set -x
-        brew install jq \
-        || die "ERROR: $what install failed: '$?'."
-        [[ true == $ALREADY_SET_X ]] || set +x
-      fi ;
-    fi ;
-  fi ;
+  _ensure_it jq
+}
+ensure_kubectl() {
+  _ensure_it jq
 }
 ensure_make() {
-  local what="XCode (for make, etc.)"
-  if ! which make > /dev/null 2>&1 ; then
-    local msg="$what should be installed"
-    if [[ false == $CHANGE ]] ; then
-      echo "FAILURE: Check failed: $msg."
-      CHECKS_RETURNS=1
-    else # If CHANGE=true, make changes to install it.
-      echo "NOTE: $msg; installing now."
-      local uname_s=$(uname -s)
-      if [[ Darwin != $uname_s ]] ; then
-        echo "NOTE: Not installing $what on non-Darwin/non-MacOS (uname -s = '$uname_s')." 1>&2;
-        # TODO: Consider someday adding support for non-Darwin/non-MacOS.
-        CHECKS_RETURNS=1
-      else
-        check_for_admin || must_be_admin_error $what
-        ALREADY_SET_X=`case "$-" in *x*) echo "true" ;; esac`
-        set -x
-        xcode-select --install \
-        || die "ERROR: $what install failed: '$?'."
-        [[ true == $ALREADY_SET_X ]] || set +x
-      fi ;
-    fi ;
-  fi ;
+  _ensure_it "XCode (for make, etc.)" make
 }
 ensure_rocker() {
-  local what="Rocker"
-  if ! which rocker > /dev/null 2>&1 ; then
-    local msg="$what should be installed"
-    if [[ false == $CHANGE ]] ; then
-      echo "FAILURE: Check failed: $msg."
-      CHECKS_RETURNS=1
-    else # If CHANGE=true, make changes to install it.
-      echo "NOTE: $msg; installing now."
-      local uname_s=$(uname -s)
-      if [[ Darwin != $uname_s ]] ; then
-        echo "NOTE: Not installing $what on non-Darwin/non-MacOS (uname -s = '$uname_s')." 1>&2;
-        # TODO: Consider someday adding support for non-Darwin/non-MacOS.
-        CHECKS_RETURNS=1
-      else
-        # check_for_admin || must_be_admin_error $what
-        ALREADY_SET_X=`case "$-" in *x*) echo "true" ;; esac`
-        set -x
-        install_rocker \
-        || die "ERROR: $what install failed: '$?'."
-        [[ true == $ALREADY_SET_X ]] || set +x
-      fi ;
-    fi ;
-  fi ;
+  _ensure_it Rocker rocker
 }
 ensure_virtualbox() {
   # # NOTE: I do not assume a user would want this automatically installed via Homebrew.
-  local what=VirtualBox
-  if ! which $what > /dev/null 2>&1 ; then
-    local msg="$what should be installed"
-    if [[ false == $CHANGE ]] ; then
-      echo "FAILURE: Check failed: $msg."
-      CHECKS_RETURNS=1
-    else # If CHANGE=true, make changes to install it.
-      die "ERROR: $msg; please install it from https://www.virtualbox.org/wiki/Downloads (or just {brew cask install virtualbox})."
-    fi ;
-  fi ;
+  _ensure_manual VirtualBox
 }
 ensure_vagrant() {
   # # NOTE: I do not assume a user would want this automatically installed via Homebrew.
-  local what=Vagrant
-  if ! which vagrant > /dev/null 2>&1 ; then
-    local msg="$what should be installed"
-    if [[ false == $CHANGE ]] ; then
-      echo "FAILURE: Check failed: $msg."
-      CHECKS_RETURNS=1
-    else # If CHANGE=true, make changes to install it.
-      die "ERROR: $msg; please install it from https://www.vagrantup.com/downloads.html (or just {brew cask install vagrant})."
-    fi ;
-  fi ;
+  _ensure_manual Vagrant vagrant
 }
-
 fail_check() {
   echo "$1" 1>&2
   CHECKS_RETURNS=1
@@ -271,12 +180,27 @@ get_admin_gid() {
   fi ;
   echo $gid
 }
+install_aws() {
+  brew install awscli
+}
+install_brew() {
+  /usr/bin/ruby -e "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/master/install)"
+}
+install_jq() {
+  brew install jq
+}
+install_kubectl() {
+  brew install kubectl
+}
+install_make() {
+  xcode-select --install
+}
 install_rocker() {
   local result=0
   brew tap grammarly/tap \
   && brew install grammarly/tap/rocker \
   || result=1
-  [[ 0 -eq $result ]] || echo "ERROR: Failed to install rocker: '$?'."
+  [[ 0 -eq $result ]] || fail_check "ERROR: Failed to install rocker: '$?'."
   return $result
 }
 mk_bash_every_time() {
@@ -334,6 +258,25 @@ main() {
 main "$@"
 EOFbg
 }
+mk_bin_kubectl() {
+  # # NOTE: Running kubectl as a Docker-contained binary is dumb. Just run it locally.
+  # Alternate = brew install kubectl
+  cat > ~/bin/kubectl <<'EOFbg'
+#!/bin/bash
+
+image='lachlanevenson/k8s-kubectl:latest'
+
+main() {
+    docker run --rm -it \
+      -v $HOME/.kube:/root/.kube -w /root/.kube/ \
+      "$image" \
+      "$@"
+    #
+}
+
+main "$@"
+EOFbg
+}
 mk_bin_packer() {
   cat > ~/bin/packer <<'EOFbg'
 #!/bin/bash
@@ -379,4 +322,13 @@ must_be_admin_error() {
   msg="$msg or an AdminGuard/\"promote to admin\" app"
   msg="$msg or maybe even an App Store."
   die "ERROR: $msg"
+}
+oops_manual_url_docker() {
+  echo 'https://docs.docker.com/docker-for-mac/install/#install-and-run-docker-for-mac'
+}
+oops_manual_url_vagrant() {
+  echo 'https://www.vagrantup.com/downloads.html (or just {brew cask install vagrant})'
+}
+oops_manual_url_VirtualBox() {
+  echo 'https://www.virtualbox.org/wiki/Downloads (or just {brew cask install virtualbox})'
 }
