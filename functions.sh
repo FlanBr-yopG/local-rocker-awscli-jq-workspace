@@ -53,6 +53,7 @@ _ensure_it() {
 _ensure_manual() {
   local what=$1
   local whatcode=$2
+  [[ $whatcode ]] || whatcode=$what
   if ! which $whatcode > /dev/null 2>&1 ; then
     local msg="$what should be installed"
     if [[ false == $CHANGE ]] ; then
@@ -140,7 +141,7 @@ ensure_jq() {
   _ensure_it jq
 }
 ensure_kubectl() {
-  _ensure_it jq
+  _ensure_it kubectl
 }
 ensure_make() {
   _ensure_it "XCode (for make, etc.)" make
